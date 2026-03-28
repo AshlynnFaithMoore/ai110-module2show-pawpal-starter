@@ -50,3 +50,23 @@ The current scheduler includes several advanced behaviors beyond basic task orde
 - **Task filtering** by completion status and pet name to support focused views.
 - **Recurring task rollover** for `daily` and `weekly` tasks, automatically creating the next occurrence when completed.
 - **Conflict detection warnings** that identify overlapping scheduled tasks across one or more pets without crashing the app.
+
+## Testing PawPal+
+
+Run the full test suite with:
+
+```bash
+python -m pytest
+```
+
+The tests cover core scheduling reliability, including:
+
+- Task validation, completion status updates, and recurrence behavior (`once`/`daily`/`weekly`)
+- Pet task management (add/remove/list active tasks)
+- Owner constraints (time budget and preferred time windows)
+- Scheduler ranking, time sorting, filtering, and daily plan generation
+- Conflict detection for overlapping tasks and no-conflict boundary cases
+
+**Confidence Level:** ★★★★★ (5/5)
+
+Based on current results (all tests passing), the system is highly reliable for the implemented scope.

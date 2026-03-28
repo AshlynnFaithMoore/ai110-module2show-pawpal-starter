@@ -487,3 +487,112 @@ class TestScheduler:
         assert task.active is False
         assert next_task is None
         assert len(pet.tasks) == 1
+
+    def test_sort_by_time_orders_hhmm_values(self) -> None:
+        """Test sort_by_time orders tasks by HH:MM and sends None to the end."""
+        scheduler = Scheduler()
+        tasks = [
+            Task(task_id="t1", title="Late", category="other", duration_minutes=10, priority="low", due_by="12:30"),
+            Task(task_id="t2", title="Early", category="other", duration_minutes=10, priority="low", due_by="08:00"),
+            Task(task_id="t3", title="NoTime", category="other", duration_minutes=10, priority="low", due_by=None),
+            Task(task_id="t4", title="Mid", category="other", duration_minutes=10, priority="low", due_by="09:15"),
+        ]
+
+        sorted_tasks = scheduler.sort_by_time(tasks)
+
+        assert [task.task_id for task in sorted_tasks] == ["t2", "t4", "t1", "t3"]
+
+    def test_filter_tasks_by_pet_and_completion(self) -> None:
+        """Test filtering tasks by both pet name and completion status."""
+        owner = Owner(owner_id="o1", name="Jordan")
+        mochi = Pet(pet_id="p1", name="Mochi", species="dog")
+        whiskers = Pet(pet_id="p2", name="Whiskers", species="cat")
+        owner.add_pet(mochi)
+        owner.add_pet(whiskers)
+
+        done_task = Task(task_id="m1", title="Done", category="walk", duration_minutes=10, priority="medium")
+        done_task.mark_complete()
+        mochi.add_task(done_task)
+        mochi.add_task(Task(task_id="m2", title="Pending", category="feed", duration_minutes=10, priority="medium"))
+        whiskers.add_task(Task(task_id="w1", title="Other Pet", category="feed", duration_minutes=10, priority="medium"))
+
+        scheduler = Scheduler()
+        filtered = scheduler.filter_tasks(owner, completed=True, pet_name="Mochi")
+
+        assert len(filtered) == 1
+        assert filtered[0].task_id == "m1"
+
+    def test_generate_daily_plan_handles_pet_with_no_tasks(self) -> None:
+        """Test generate_daily_plan returns empty list for a pet with no tasks."""
+        owner = Owner(owner_id="o1", name="Jordan", daily_time_budget_minutes=60)
+        pet = Pet(pet_id="p1", name="Mochi", species="dog")
+        scheduler = Scheduler()
+
+        plan = scheduler.generate_daily_plan(owner, pet)
+
+        assert plan == []
+
+    def test_detect_schedule_conflicts_exact_same_time(self) -> None:
+        """Test conflict warnings are returned for tasks scheduled at the exact same interval."""
+        scheduler = Scheduler()
+        pet_plans = {
+            "Mochi": [
+                {
+                    "task_id": "m1",
+                    "task_title": "Morning Walk",
+                    "duration_minutes": 30,
+                    "priority": "high",
+                    "start_time": "08:00",
+                    "end_time": "08:30",
+                    "reason": "test",
+                }
+            ],
+            "Whiskers": [
+                {
+                    "task_id": "w1",
+                    "task_title": "Feed",
+                    "duration_minutes": 10,
+                    "priority": "high",
+                    "start_time": "08:00",
+                    "end_time": "08:30",
+                    "reason": "test",
+                }
+            ],
+        }
+
+        warnings = scheduler.detect_schedule_conflicts(pet_plans)
+
+        assert len(warnings) >= 1
+        assert "Conflict" in warnings[0]
+
+    def test_detect_schedule_conflicts_none_when_times_do_not_overlap(self) -> None:
+        """Test no warning is returned when one task starts exactly when another ends."""
+        scheduler = Scheduler()
+        pet_plans = {
+            "Mochi": [
+                {
+                    "task_id": "m1",
+                    "task_title": "Morning Walk",
+                    "duration_minutes": 30,
+                    "priority": "high",
+                    "start_time": "08:00",
+                    "end_time": "08:30",
+                    "reason": "test",
+                }
+            ],
+            "Whiskers": [
+                {
+                    "task_id": "w1",
+                    "task_title": "Feed",
+                    "duration_minutes": 10,
+                    "priority": "high",
+                    "start_time": "08:30",
+                    "end_time": "08:40",
+                    "reason": "test",
+                }
+            ],
+        }
+
+        warnings = scheduler.detect_schedule_conflicts(pet_plans)
+
+        assert warnings == []

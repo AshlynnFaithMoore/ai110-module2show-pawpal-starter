@@ -52,7 +52,11 @@ Your job is to design the system first (UML), then implement the logic in Python
 
 ## 📸 Demo
 
-<a href="/course_images/ai110/pawpal_demo.png" target="_blank"><img src='/course_images/ai110/pawpal_demo.png' title='PawPal App' width='' alt='PawPal App' class='center-block' /></a>
+Save a screenshot of your Streamlit app as `pawpal_demo.png` in this project folder, then README will render it below:
+
+![PawPal App Demo](pawpal_demo.png)
+
+If the image does not appear, confirm the file exists at the project root with that exact name.
 
 ## What you will build
 

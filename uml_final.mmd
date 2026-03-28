@@ -1,0 +1,82 @@
+classDiagram
+class Owner {
+  +str owner_id
+  +str name
+  +int daily_time_budget_minutes
+  +str preferred_start_time
+  +str preferred_end_time
+  +List~Pet~ pets
+  +set_time_budget(minutes)
+  +set_preferred_window(start, end)
+  +can_fit(total_minutes) bool
+  +add_pet(pet)
+  +get_pets() List~Pet~
+  +get_all_tasks() List~Task~
+}
+
+class Pet {
+  +str pet_id
+  +str name
+  +str species
+  +int? age
+  +str care_notes
+  +Owner? owner
+  +List~Task~ tasks
+  +add_task(task)
+  +remove_task(task_id) bool
+  +get_active_tasks() List~Task~
+}
+
+class Task {
+  +str task_id
+  +str title
+  +str category
+  +int duration_minutes
+  +str priority
+  +str frequency
+  +str? due_date
+  +bool required
+  +str? due_by
+  +bool active
+  +bool completed
+  +priority_weight() int
+  +is_due_window_valid(owner) bool
+  +summary() str
+  +mark_complete()
+  +mark_incomplete()
+  +create_next_occurrence() Task?
+}
+
+class Scheduler {
+  +str strategy
+  +int buffer_minutes
+  +List~ScheduleItem~ plan
+  +sort_by_time(tasks) List~Task~
+  +filter_tasks(owner, completed, pet_name) List~Task~
+  +mark_task_complete(pet, task_id) Task?
+  +rank_tasks(tasks) List~Task~
+  +generate_daily_plan(owner, pet) List~ScheduleItem~
+  +explain_plan(owner, plan) List~str~
+  +detect_schedule_conflicts(pet_plans) List~str~
+}
+
+class ScheduleItem {
+  <<TypedDict>>
+  +str task_id
+  +str task_title
+  +int duration_minutes
+  +str priority
+  +str start_time
+  +str end_time
+  +str reason
+}
+
+Owner "1" o-- "0..*" Pet : owns
+Pet "1" *-- "0..*" Task : manages
+Pet "0..1" --> "1" Owner : owner
+Scheduler ..> Owner : uses
+Scheduler ..> Pet : uses
+Scheduler ..> Task : ranks/completes
+Scheduler ..> ScheduleItem : creates
+Task ..> Owner : due-window check
+Task ..> Task : next occurrence

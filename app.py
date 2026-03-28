@@ -21,6 +21,15 @@ def get_pet_by_id(owner: Owner, pet_id: str) -> Pet | None:
             return pet
     return None
 
+
+def get_pet_name_for_task(owner: Owner, task_id: str) -> str:
+    """Return the pet name that owns a task id, or 'unknown'."""
+    for pet in owner.get_pets():
+        for task in pet.tasks:
+            if task.task_id == task_id:
+                return pet.name
+    return "unknown"
+
 st.title("🐾 PawPal+")
 
 st.markdown(
@@ -115,6 +124,7 @@ st.caption("Add tasks to a selected pet using your backend class methods.")
 if st.session_state.owner_initialized and st.session_state.owner is not None:
     pets = st.session_state.owner.get_pets()
     if pets:
+        scheduler = Scheduler(strategy="priority_first", buffer_minutes=0)
         pet_options = {f"{pet.name} ({pet.species})": pet.pet_id for pet in pets}
         selected_pet_label = st.selectbox("Select pet for task", list(pet_options.keys()))
         selected_pet_id = pet_options[selected_pet_label]
@@ -148,21 +158,69 @@ if st.session_state.owner_initialized and st.session_state.owner is not None:
             st.rerun()
 
         if selected_pet is not None and selected_pet.tasks:
-            st.write(f"Current tasks for {selected_pet.name}:")
+            st.write(f"Current tasks for {selected_pet.name} (sorted by time):")
+            sorted_tasks = scheduler.sort_by_time(selected_pet.tasks)
             st.table(
                 [
                     {
                         "task_id": task.task_id,
                         "title": task.title,
                         "category": task.category,
+                        "due_by": task.due_by,
                         "duration_minutes": task.duration_minutes,
                         "priority": task.priority,
                         "required": task.required,
                         "completed": task.completed,
                     }
-                    for task in selected_pet.tasks
+                    for task in sorted_tasks
                 ]
             )
+
+            st.markdown("#### Filtered Task View")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                completion_filter = st.selectbox(
+                    "Completion filter",
+                    ["all", "completed", "incomplete"],
+                    key="completion_filter",
+                )
+            with col_b:
+                pet_filter = st.selectbox(
+                    "Pet filter",
+                    ["all"] + [pet.name for pet in pets],
+                    key="pet_filter",
+                )
+
+            completed_value = None
+            if completion_filter == "completed":
+                completed_value = True
+            elif completion_filter == "incomplete":
+                completed_value = False
+
+            pet_name_value = None if pet_filter == "all" else pet_filter
+            filtered_tasks = scheduler.filter_tasks(
+                st.session_state.owner,
+                completed=completed_value,
+                pet_name=pet_name_value,
+            )
+
+            if filtered_tasks:
+                st.table(
+                    [
+                        {
+                            "task_id": task.task_id,
+                            "title": task.title,
+                            "pet": get_pet_name_for_task(st.session_state.owner, task.task_id),
+                            "due_by": task.due_by,
+                            "priority": task.priority,
+                            "completed": task.completed,
+                        }
+                        for task in scheduler.sort_by_time(filtered_tasks)
+                    ]
+                )
+                st.success(f"Showing {len(filtered_tasks)} task(s) with current filters.")
+            else:
+                st.info("No tasks match the current filters.")
         elif selected_pet is not None:
             st.info(f"No tasks yet for {selected_pet.name}. Add one above.")
     else:
@@ -194,8 +252,26 @@ if st.session_state.owner_initialized and st.session_state.owner is not None and
                 scheduler = Scheduler(strategy="priority_first", buffer_minutes=0)
                 plan = scheduler.generate_daily_plan(owner, schedule_pet)
 
+                # Detect cross-pet conflicts and show non-fatal warnings.
+                all_pet_plans = {
+                    pet.name: scheduler.generate_daily_plan(owner, pet)
+                    for pet in owner.get_pets()
+                    if pet.get_active_tasks()
+                }
+                conflict_warnings = scheduler.detect_schedule_conflicts(all_pet_plans)
+
                 if plan:
                     st.success(f"✅ Daily schedule generated for {schedule_pet.name}!")
+
+                    if conflict_warnings:
+                        st.warning(
+                            "Scheduling conflicts detected. Review overlapping tasks below and adjust task times or durations."
+                        )
+                        with st.expander("View conflict details"):
+                            for warning in conflict_warnings:
+                                st.write(f"- {warning}")
+                    else:
+                        st.success("No task time conflicts detected across pets.")
 
                     st.markdown("### Today's Schedule")
                     schedule_data = [

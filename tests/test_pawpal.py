@@ -415,3 +415,75 @@ class TestScheduler:
 
         assert len(explanations) > 0
         assert "Walk" in explanations[0]
+
+    def test_mark_task_complete_daily_creates_next_occurrence(self) -> None:
+        """Test completing a daily task creates the next day's instance."""
+        pet = Pet(pet_id="p1", name="Mochi", species="dog")
+        task = Task(
+            task_id="daily-1",
+            title="Daily Walk",
+            category="walk",
+            duration_minutes=20,
+            priority="high",
+            frequency="daily",
+            due_date="2026-03-28",
+            due_by="08:00",
+        )
+        pet.add_task(task)
+
+        scheduler = Scheduler()
+        next_task = scheduler.mark_task_complete(pet, "daily-1")
+
+        assert task.completed is True
+        assert task.active is False
+        assert next_task is not None
+        assert next_task.frequency == "daily"
+        assert next_task.due_date == "2026-03-29"
+        assert next_task.completed is False
+        assert next_task.active is True
+        assert len(pet.tasks) == 2
+
+    def test_mark_task_complete_weekly_creates_next_occurrence(self) -> None:
+        """Test completing a weekly task creates the next week's instance."""
+        pet = Pet(pet_id="p2", name="Whiskers", species="cat")
+        task = Task(
+            task_id="weekly-1",
+            title="Weekly Grooming",
+            category="grooming",
+            duration_minutes=30,
+            priority="medium",
+            frequency="weekly",
+            due_date="2026-03-28",
+            due_by="09:00",
+        )
+        pet.add_task(task)
+
+        scheduler = Scheduler()
+        next_task = scheduler.mark_task_complete(pet, "weekly-1")
+
+        assert next_task is not None
+        assert next_task.frequency == "weekly"
+        assert next_task.due_date == "2026-04-04"
+
+    def test_mark_task_complete_once_creates_no_new_task(self) -> None:
+        """Test completing a one-time task does not create a follow-up task."""
+        pet = Pet(pet_id="p3", name="Milo", species="dog")
+        task = Task(
+            task_id="once-1",
+            title="Vet Visit",
+            category="meds",
+            duration_minutes=45,
+            priority="high",
+            frequency="once",
+            due_date="2026-03-28",
+            due_by="10:00",
+        )
+        pet.add_task(task)
+
+        scheduler = Scheduler()
+        next_task = scheduler.mark_task_complete(pet, "once-1")
+
+        assert task.completed is True
+        assert task.active is False
+        assert next_task is None
+        assert len(pet.tasks) == 1

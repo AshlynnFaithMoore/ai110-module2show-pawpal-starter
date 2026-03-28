@@ -41,3 +41,12 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+## Smarter Scheduling
+
+The current scheduler includes several advanced behaviors beyond basic task ordering:
+
+- **Time-based sorting** using HH:MM values so tasks can be ordered by planned time.
+- **Task filtering** by completion status and pet name to support focused views.
+- **Recurring task rollover** for `daily` and `weekly` tasks, automatically creating the next occurrence when completed.
+- **Conflict detection warnings** that identify overlapping scheduled tasks across one or more pets without crashing the app.

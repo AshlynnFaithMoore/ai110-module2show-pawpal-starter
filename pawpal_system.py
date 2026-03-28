@@ -95,6 +95,8 @@ class Task:
     category: str
     duration_minutes: int
     priority: str
+    frequency: str = "once"
+    due_date: Optional[str] = None
     required: bool = False
     due_by: Optional[str] = None
     active: bool = True
@@ -106,6 +108,13 @@ class Task:
             raise ValueError("Task duration must be greater than 0")
         if self.priority not in PRIORITY_WEIGHTS:
             raise ValueError(f"Task priority must be one of {list(PRIORITY_WEIGHTS.keys())}")
+        if self.frequency not in {"once", "daily", "weekly"}:
+            raise ValueError("Task frequency must be one of: once, daily, weekly")
+        if self.due_date is not None:
+            try:
+                datetime.strptime(self.due_date, "%Y-%m-%d")
+            except ValueError as e:
+                raise ValueError(f"Invalid due_date format (use YYYY-MM-DD): {e}")
         if self.due_by is not None:
             try:
                 _parse_hhmm(self.due_by)
@@ -137,6 +146,32 @@ class Task:
     def mark_incomplete(self) -> None:
         """Mark this task as not completed."""
         self.completed = False
+
+    def create_next_occurrence(self) -> Optional[Task]:
+        """Return a new task for the next daily/weekly occurrence, or None for one-time tasks."""
+        if self.frequency not in {"daily", "weekly"}:
+            return None
+
+        base_date = datetime.today().date()
+        if self.due_date is not None:
+            base_date = datetime.strptime(self.due_date, "%Y-%m-%d").date()
+
+        delta = timedelta(days=1 if self.frequency == "daily" else 7)
+        next_date = (base_date + delta).strftime("%Y-%m-%d")
+
+        return Task(
+            task_id=f"{self.task_id}-next-{next_date}",
+            title=self.title,
+            category=self.category,
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            frequency=self.frequency,
+            due_date=next_date,
+            required=self.required,
+            due_by=self.due_by,
+            active=True,
+            completed=False,
+        )
 
 
 @dataclass
@@ -187,6 +222,40 @@ class Scheduler:
             return 24 * 60 + 1  # No due time sorts last
         due_time = _parse_hhmm(task.due_by)
         return due_time.hour * 60 + due_time.minute
+
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Sort tasks by HH:MM `due_by` time, placing tasks with no time at the end."""
+        return sorted(tasks, key=lambda task: task.due_by if task.due_by is not None else "99:99")
+
+    def filter_tasks(
+        self,
+        owner: Owner,
+        completed: Optional[bool] = None,
+        pet_name: Optional[str] = None,
+    ) -> list[Task]:
+        """Return tasks filtered by optional completion status and/or pet name."""
+        tasks: list[Task] = []
+        for pet in owner.get_pets():
+            if pet_name is not None and pet.name.lower() != pet_name.lower():
+                continue
+            tasks.extend(pet.tasks)
+
+        if completed is not None:
+            tasks = [task for task in tasks if task.completed == completed]
+
+        return tasks
+
+    def mark_task_complete(self, pet: Pet, task_id: str) -> Optional[Task]:
+        """Complete an active task and auto-create its next instance for recurring frequencies."""
+        for task in pet.tasks:
+            if task.task_id == task_id and task.active:
+                task.mark_complete()
+                task.active = False
+                next_task = task.create_next_occurrence()
+                if next_task is not None:
+                    pet.add_task(next_task)
+                return next_task
+        return None
 
     def rank_tasks(self, tasks: list[Task]) -> list[Task]:
         """Sort tasks by ranking criteria (required, priority, due time, duration, title)."""
@@ -277,3 +346,42 @@ class Scheduler:
 
         explanations = [item["reason"] for item in plan_to_explain]
         return explanations
+
+    def detect_schedule_conflicts(self, pet_plans: dict[str, list[ScheduleItem]]) -> list[str]:
+        """Detect overlapping time ranges and return non-fatal warning messages."""
+        entries: list[dict[str, str | datetime]] = []
+
+        for pet_name, plan in pet_plans.items():
+            for item in plan:
+                entries.append(
+                    {
+                        "pet": pet_name,
+                        "task": str(item["task_title"]),
+                        "start_str": str(item["start_time"]),
+                        "end_str": str(item["end_time"]),
+                        "start": _parse_hhmm(str(item["start_time"])),
+                        "end": _parse_hhmm(str(item["end_time"])),
+                    }
+                )
+
+        entries.sort(key=lambda entry: entry["start"])
+        warnings: list[str] = []
+
+        for i in range(len(entries)):
+            for j in range(i + 1, len(entries)):
+                first = entries[i]
+                second = entries[j]
+
+                if second["start"] >= first["end"]:
+                    break
+
+                # Overlap check: intervals intersect
+                if first["start"] < second["end"] and second["start"] < first["end"]:
+                    warnings.append(
+                        "⚠️ Conflict: "
+                        f"{first['pet']} - {first['task']} ({first['start_str']}-{first['end_str']}) "
+                        "overlaps with "
+                        f"{second['pet']} - {second['task']} ({second['start_str']}-{second['end_str']})."
+                    )
+
+        return warnings

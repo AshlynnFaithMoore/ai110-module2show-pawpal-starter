@@ -54,6 +54,8 @@ def main() -> None:
             category="feed",
             duration_minutes=10,
             priority="high",
+            frequency="daily",
+            due_date="2026-03-28",
             required=True,
             due_by="08:00",
         )
@@ -66,6 +68,7 @@ def main() -> None:
             duration_minutes=20,
             priority="medium",
             required=False,
+            due_by="12:30",
         )
     )
     mochi.add_task(
@@ -86,10 +89,10 @@ def main() -> None:
             task_id="t5",
             title="Feed Breakfast",
             category="feed",
-            duration_minutes=5,
+            duration_minutes=10,
             priority="high",
             required=True,
-            due_by="08:30",
+            due_by="08:00",
         )
     )
     whiskers.add_task(
@@ -99,8 +102,10 @@ def main() -> None:
             category="grooming",
             duration_minutes=10,
             priority="medium",
+            frequency="weekly",
+            due_date="2026-03-28",
             required=True,
-            due_by="09:00",
+            due_by="08:15",
         )
     )
     whiskers.add_task(
@@ -111,11 +116,75 @@ def main() -> None:
             duration_minutes=15,
             priority="low",
             required=False,
+            due_by="09:40",
         )
     )
 
+    # Mark one task complete to test completion filtering
+    mochi.tasks[1].mark_complete()  # Feed Breakfast complete
+
     # Create scheduler and generate plans
     scheduler = Scheduler(strategy="priority_first", buffer_minutes=0)
+
+    # Pre-generate plans for each pet so we can detect conflicts across pets.
+    plans_by_pet = {pet.name: scheduler.generate_daily_plan(owner, pet) for pet in owner.get_pets()}
+
+    # Conflict detection demo: we intentionally have tasks at the same time across pets.
+    print("\n" + "=" * 70)
+    print("CONFLICT DETECTION DEMO".center(70))
+    print("=" * 70)
+    conflict_warnings = scheduler.detect_schedule_conflicts(plans_by_pet)
+    if conflict_warnings:
+        for warning in conflict_warnings:
+            print(warning)
+    else:
+        print("No schedule conflicts detected.")
+
+    # Demonstrate sorting by HH:MM due_by time
+    print("\n" + "=" * 70)
+    print("SORTING DEMO (tasks added out of order, then sorted by due_by)".center(70))
+    print("=" * 70)
+    for pet in owner.get_pets():
+        print(f"\n{pet.name} - raw order:")
+        for task in pet.tasks:
+            print(f"  {task.title:<24} due_by={task.due_by} completed={task.completed}")
+
+        print(f"{pet.name} - sorted by time:")
+        for task in scheduler.sort_by_time(pet.tasks):
+            print(f"  {task.title:<24} due_by={task.due_by} completed={task.completed}")
+
+    # Demonstrate filtering by completion status and pet name
+    print("\n" + "=" * 70)
+    print("FILTERING DEMO".center(70))
+    print("=" * 70)
+    completed_tasks = scheduler.filter_tasks(owner, completed=True)
+    print("Completed tasks across all pets:")
+    for task in completed_tasks:
+        print(f"  - {task.title} ({task.task_id})")
+
+    whiskers_tasks = scheduler.filter_tasks(owner, pet_name="Whiskers")
+    print("\nAll tasks for pet name 'Whiskers':")
+    for task in whiskers_tasks:
+        print(f"  - {task.title} due_by={task.due_by} completed={task.completed}")
+
+    # Demonstrate recurring completion logic
+    print("\n" + "=" * 70)
+    print("RECURRING COMPLETION DEMO".center(70))
+    print("=" * 70)
+
+    next_daily = scheduler.mark_task_complete(mochi, "t2")
+    print("Completed Mochi task 't2' (daily).")
+    if next_daily is not None:
+        print(
+            f"  Auto-created next daily task: {next_daily.task_id} due_date={next_daily.due_date} due_by={next_daily.due_by}"
+        )
+
+    next_weekly = scheduler.mark_task_complete(whiskers, "t6")
+    print("Completed Whiskers task 't6' (weekly).")
+    if next_weekly is not None:
+        print(
+            f"  Auto-created next weekly task: {next_weekly.task_id} due_date={next_weekly.due_date} due_by={next_weekly.due_by}"
+        )
 
     print("=" * 70)
     print("🐾 PawPal+ DAILY SCHEDULE 🐾".center(70))
@@ -139,8 +208,8 @@ def main() -> None:
         print(f"Total Tasks: {len(active_tasks)}")
         print()
 
-        # Generate plan
-        plan = scheduler.generate_daily_plan(owner, pet)
+        # Reuse pre-generated plan
+        plan = plans_by_pet[pet.name]
 
         if not plan:
             print("❌ No tasks could be scheduled.")

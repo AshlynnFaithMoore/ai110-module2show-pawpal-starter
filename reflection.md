@@ -69,6 +69,10 @@ After reviewing the skeleton, there were five key improvements:
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+I reviewed my conflict-detection algorithm with AI. A more Pythonic option was a single-pass sweep after sorting (better asymptotic performance), but I kept my current nested-overlap check because it is easier for me to debug and it reports all overlap pairs explicitly in warning messages.
+
+The tradeoff is performance vs. clarity/completeness: my approach is potentially slower on very large schedules, but for this project’s small daily task lists it is reasonable and produces clearer conflict warnings for users.
+
 ---
 
 ## 3. AI Collaboration
